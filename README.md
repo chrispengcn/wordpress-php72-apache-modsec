@@ -1,3 +1,4 @@
+# README.md
 # WordPress + Apache + ModSecurity + OWASP CRS WAF 镜像
 基于官方 `wordpress:php8.2-apache` 构建，内置 **ModSecurity WAF 防火墙**，自动下载 OWASP CRS 官方规则集，支持目录持久化挂载，一键部署，无配置报错，攻击拦截生效。
 
@@ -15,13 +16,13 @@
 - 兼容旧版 ModSecurity 指令，**无语法报错、无启动异常**
 - 完美拦截 SQL注入、XSS、恶意请求等Web攻击
 - 原生 WordPress 功能完整，插件、主题、后台正常运行
+- **无内置数据库**，连接用户现有外部数据库
 
 ## 目录结构
 ```
 .
 ├── Dockerfile              # 镜像构建文件
 ├── init.sh                 # 容器启动脚本：自动生成配置 + 自动下载CRS规则
-├── docker-compose.yml      # 一键部署编排（WordPress+WAF+MySQL数据库）
 ├── modsec/                 # 挂载目录：ModSecurity全部配置（自动生成）
 │   ├── modsecurity.conf
 │   ├── crs-setup.conf
@@ -120,69 +121,40 @@ EOF
 exec apache2-foreground
 ```
 
-### 3. docker-compose.yml
-```yaml
-version: '3'
-
-services:
-  wordpress:
-    build: .
-    ports:
-      - "30080:80"
-    volumes:
-      # WordPress 网站文件持久化挂载
-      - ./html:/var/www/html
-      # ModSecurity + CRS 全部配置统一挂载
-      - ./modsec:/etc/modsec
-    environment:
-      WORDPRESS_DB_HOST: db
-      WORDPRESS_DB_USER: wpuser
-      WORDPRESS_DB_PASSWORD: wppass
-      WORDPRESS_DB_NAME: wpdb
-    depends_on:
-      - db
-    restart: always
-
-  # MySQL 5.7 数据库服务
-  db:
-    image: mysql:5.7
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: wpdb
-      MYSQL_USER: wpuser
-      MYSQL_PASSWORD: wppass
-    volumes:
-      - db-data:/var/lib/mysql
-    restart: always
-
-volumes:
-  db-data:
-```
-
 ## 快速部署步骤
 ### 1. 准备项目目录
-新建项目文件夹，将上方 `Dockerfile`、`init.sh`、`docker-compose.yml` 三个文件放入目录内。
+新建文件夹，放入 `Dockerfile`、`init.sh` 两个文件。
 
 ### 2. 赋予脚本执行权限
 ```bash
 chmod +x init.sh
 ```
 
-### 3. 构建镜像并一键启动
+### 3. 构建镜像
 ```bash
-# 停止旧容器（如有）
-docker-compose down
-
-# 构建镜像 + 后台启动所有服务
-docker-compose up -d
+docker build -t wordpress-php82-modsec .
 ```
 
-### 4. 访问站点
+### 4. 启动容器（连接外部数据库）
+```bash
+docker run -d \
+  --restart=always \
+  --name wordpress-modsec \
+  -p 30080:80 \
+  -v ./html:/var/www/html \
+  -v ./modsec:/etc/modsec \
+  -e WORDPRESS_DB_HOST="你的数据库IP:3306" \
+  -e WORDPRESS_DB_USER="数据库用户名" \
+  -e WORDPRESS_DB_PASSWORD="数据库密码" \
+  -e WORDPRESS_DB_NAME="数据库名" \
+  wordpress-php82-modsec
+```
+
+### 5. 访问站点
 默认端口：`30080`
 ```
 http://服务器IP:30080
 ```
-按照页面提示完成 WordPress 安装即可正常使用。
 
 ## 版本切换说明（PHP7.2 ↔ PHP8.2 通用）
 ### 切换至 PHP 7.2（兼容老旧项目）
@@ -196,9 +168,8 @@ FROM wordpress:php7.2-apache
 
 ## 功能验证
 ### 1. 验证 ModSecurity 模块加载
-进入容器执行：
 ```bash
-docker exec -it $(docker ps | grep wordpress | awk '{print $1}') apache2ctl -M | grep security
+docker exec -it wordpress-modsec apache2ctl -M | grep security
 ```
 出现如下内容即为模块加载成功：
 ```
@@ -213,7 +184,6 @@ http://服务器IP:30080/?id=1' OR 1=1--
 
 ### 3. 查看挂载配置目录
 ```bash
-# 查看本地挂载目录结构
 ls ./modsec
 ```
 自动生成文件：
