@@ -1,7 +1,7 @@
 
-# 基础镜像 WordPress PHP8.2 Apache
-# 如需切换 PHP7.2 直接修改为 FROM wordpress:php7.2-apache 即可全部通用
-FROM wordpress:php8.2-apache
+# 基础镜像 WordPress PHP7.2 Apache
+
+FROM wordpress:php7.2-apache
 
 # 安装 mod_security 模块
 RUN apt-get update && \
